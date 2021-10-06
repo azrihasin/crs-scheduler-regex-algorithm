@@ -10,9 +10,11 @@ from tika import parser
 import textract
 import io
 from PIL import Image
-import pytesseract
+import pytesseract as pytesseract
 from wand.image import Image as wi
+from flask_cors import CORS, cross_origin
 from datetime import datetime
+import os
 
 
 def getSection(line, code, day, time):
@@ -24,17 +26,14 @@ def getSection(line, code, day, time):
 
     for index, sWord in enumerate(list):
 
-        if(sWord == "R" or sWord == "RSV" or sWord == "R_" ):
+        if(sWord == "R" or sWord == "RSV" or sWord == "R_"):
 
             start = index
 
             s_result = list[start-1]
 
             return s_result
-
   
-
-
 def filter(line, code, day, time):
 
     list = line.split(" ")
@@ -50,19 +49,17 @@ def filter(line, code, day, time):
 
                 end = index
 
-            if(sWord == "R" or sWord == "RSV" or sWord == "R_" ):
+            if(sWord == "R" or sWord == "RSV" or sWord == "R_"):
 
                 start = index
 
         result = ' '.join(list[start+1:end-1])
 
         s_result = list[start-1]
-        print(result)
 
     # print(day)
 
         return result
-
 
 def getSubject(line, code, day, time):
 
@@ -94,9 +91,39 @@ def getSubject(line, code, day, time):
 
     return new_result
 
+def validation(line):
+    
+    if re.search("MON", line):
+        if re.search('\sAM\s|\sPM\s', line):
+            return line            
+
+    elif re.search("M-W", line):
+        if re.search('\sAM\s|\sPM\s', line):
+            return line     
+
+    elif re.search("TUE", line):
+        if re.search('\sAM\s|\sPM\s', line):
+            return line     
+            
+    elif re.search("THU", line):
+        if re.search('\sAM\s|\sPM\s', line):
+            return line     
+            
+    elif re.search("T-TH", line):
+        if re.search('\sAM\s|\sPM\s', line):
+            return line     
+            
+    elif re.search("WED", line):
+        if re.search('\sAM\s|\sPM\s', line):
+            return line     
+            
+    elif re.search("FRI", line):
+        if re.search('\sAM\s|\sPM\s', line):
+            return line   
 
 def process(f):
 
+#1. CONVERT PDF FILES INTO TEXT 
     pdf = wi(filename=f, resolution=300)
     pdfImage = pdf.convert('jpeg')
 
@@ -113,7 +140,7 @@ def process(f):
         text = pytesseract.image_to_string(im, lang='eng')
         recognized_text.append(text)
 
-    file = open('a.txt', 'w')
+    file = open('temp.txt', 'w')
 
     file.write(text)
 
@@ -121,14 +148,21 @@ def process(f):
 
     print("done")
 
-    with open("a.txt", "r") as ins:
-        array = []
+#2. TEXT EXTRACTED ARE PLACED INSIDE TEXT FILE IN ORDER TO READ LINE BY LINE
+
+    with open("temp.txt", "r") as ins:
+        temp_array = []
         for line in ins:
-            array.append(line)
+            temp_array.append(line)
 
-    # print(array)
 
-    # array.append(text)'''
+    if os.path.exists("temp.txt"):
+        os.remove("temp.txt")
+        os.remove(f)
+    else:
+        print("The file does not exist")
+
+#3. INITIALIZE ARRAY TO START AN EXTRACTION PROCESS
 
     line = []
     line_code = []
@@ -157,7 +191,14 @@ def process(f):
 
     prevline = ""
 
-    #RAPATKAN MASA
+#4. VALIDATES LINE THAT WE GONNA EXTRACT SO IT ONLY CONTAINS INFORMATION WE NEED
+
+    valid_array = map(validation, temp_array)
+
+    
+    array = [i for i in valid_array if i]
+
+#5. EXTRACT LINE USING REGEX
 
     while i < len(array):
 
@@ -792,12 +833,11 @@ def process(f):
         else:
 
             None
-
+    
         prevline = array[i]
         i += 1
 
-    # for x in line:
-    #     getSubject(x,)
+    
 
     name = []
     name_code = []
@@ -807,9 +847,15 @@ def process(f):
     for i in line_time:
         print(i)
 
+    #remove anomaly()   
     
+            
 
-    for x, y in enumerate(line):
+    #MAKE SURE ALL THE ARRAY ARE THE SAME LENGTH
+    print(len(line),len(line_code),len(line_time),len(line_day))
+
+#6. EXTRACT CLASS SUBJECT AND DECIDE EVENT
+    for x, y in enumerate(line_time):
         getName = getSubject(line[x], line_code[x], line_day[x], line_time[x])
         section = getSection(line[x], line_code[x], line_day[x], line_time[x])
         name.append(getName)
@@ -823,22 +869,28 @@ def process(f):
     course_code = [i[0] for i in name_code]
 
     # remove none value in the array
+  
+    # n=[i for i,v in enumerate(name) if v == None]
+
+    # print(n)
 
     for x, y in enumerate(name):
-        if(name[x] == None):
-            name.pop(x)
-            course_code.pop(x)
-            section_code.pop(x)
-            event.pop(x)
+        if(name[x]== None):
+            name[x]= None
+            course_code[x]= None
+            section_code[x]= None
+            event[x]= None
+        
+       
 
-    # for x, y in enumerate(name):
-    #     print(event[x],"- ",name[x],"-",course_code[x])
+    name = [x for x in name if x is not None]
+    course_code = [x for x in course_code if x is not None]
+    section_code = [x for x in section_code if x is not None]
+    event = [x for x in event if x is not None]
 
-    lengthmon = len(mon)
-    lengthtue = len(tue)
-    lengthwed = len(wed)
-    lengththur = len(thur)
-    lengthfri = len(fri)
+
+    for x, y in enumerate(name):
+        print(event[x],"- ",name[x],"-",course_code[x])
 
     daymon = []
     daytue = []
@@ -848,6 +900,8 @@ def process(f):
 
     i = 0
 
+
+    #reconstruct an array containing days
     while i < len(mon):
         daymon.insert(i, "MON")
 
@@ -891,6 +945,9 @@ def process(f):
     fri = [i[0] for i in fri]
     fritime = [i[0] for i in fritime]
 
+
+    #reformat time format 
+
     start_time_temp= [i.split('-')[0] for i in montime]
     end_time_temp = [i.split('-')[1] for i in montime]
 
@@ -921,10 +978,6 @@ def process(f):
     start_time_fri =[i.replace('.', ':') for i in start_time_fri_temp]
     end_time_fri =[i.replace('.', ':') for i in end_time_fri_temp]
 
-
-
-  
-
     mon_name = []
     tue_name = []
     wed_name = []
@@ -943,7 +996,7 @@ def process(f):
     thur_event = []
     fri_event = []
 
-    # insert course name
+# 7. CONSTRUCT (COURSE NAME, SECTION, EVENT) ARRAY MATCHING WITH OTHER ARRAY
 
     for course in mon:
         for x, code in enumerate(course_code):
@@ -1003,6 +1056,7 @@ def process(f):
     # print(z)
     # print(event)
 
+#8. ARRANGE EXTRACTED DATA TO JSON FORMAT
     data = {}
     data['monday'] = []  
     data['tuesday'] = []  
@@ -1104,7 +1158,7 @@ def process(f):
 
     # data = json.dumps(arr, indent=5)
 
-    print(data)
+    # print(data)
     return data
 
 
